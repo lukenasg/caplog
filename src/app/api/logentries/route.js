@@ -1,44 +1,15 @@
 import { supabase } from '../../../../utils/supabase';
 
-// Fetch all log entries with optional filters and related data
+// Fetch all log entries with optional filters
 export async function GET(req) {
-  const { searchParams } = new URL(req.url);
-  const keywords = searchParams.get('keywords');
-  const startDate = searchParams.get('startDate');
-  const endDate = searchParams.get('endDate');
-  const includeContacts = searchParams.get('includeContacts') === 'true';
+  const { followuprequired, sort } = req.query || {};
 
-  // Build the query
-  let query = supabase.from('logentries').select('*');
+  const { data, error } = await supabase
+    .from('logentries')
+    .select('*')
+    .eq('followuprequired', followuprequired || null) // Optional filter
+    .order('logtime', { ascending: sort !== 'desc' }); // Sort by logtime
 
-  if (keywords) {
-    query = query.or(
-      `description.ilike.%${keywords}%,tags.cs.{${keywords}}`
-    );
-  }
-  if (startDate && endDate) {
-    query = query.gte('logtime', startDate).lte('logtime', endDate);
-  } else if (startDate) {
-    query = query.gte('logtime', startDate);
-  } else if (endDate) {
-    query = query.lte('logtime', endDate);
-  }
-
-  // Add related data for contacts
-  if (includeContacts) {
-    query = supabase
-      .from('logentries')
-      .select(`
-        *,
-        contacts:logentries_contactnumber_fkey (
-          fname,
-          lname,
-          email
-        )
-      `);
-  }
-
-  const { data, error } = await query;
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
@@ -49,8 +20,23 @@ export async function GET(req) {
 export async function POST(req) {
   const body = await req.json();
   const { data, error } = await supabase.from('logentries').insert([body]);
+
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
   return new Response(JSON.stringify({ data }), { status: 201 });
+}
+
+// Update a specific log entry
+export async function PATCH(req, { params }) {
+  const body = await req.json();
+  const { data, error } = await supabase
+    .from('logentries')
+    .update(body)
+    .eq('logtime', params.ID);
+
+  if (error) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+  }
+  return new Response(JSON.stringify({ data }), { status: 200 });
 }
